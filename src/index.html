@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Map Projection Explorer</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="app" class="visualization">
+        <div class="globe-section">
+            <h3>3D Globe</h3>
+            <div id="map-canvas"></div>
+        </div>
+
+        <div class="map-section">
+            <h3>Projection View</h3>
+            <div class="control-group">
+                <label for="projection-select">Projection</label>
+                <select id="projection-select">
+                    <option value="equirectangular">Equirectangular</option>
+                    <option value="mercator">Mercator</option>
+                    <option value="mollweide">Mollweide</option>
+                </select>
+            </div>
+            <canvas id="projection-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- Load app as ES module; app will import globe and projections modules -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

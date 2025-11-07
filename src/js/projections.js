@@ -1,10 +1,8 @@
-// Map Projection Mathematics
 // All functions take longitude/latitude in degrees and return normalized coordinates
 
 const Projections = {
     equirectangular: (lon, lat) => {
         // Simple cylindrical projection
-        // This is what we're starting with
         const x = lon / 180;  // Normalize to [-1, 1]
         const y = lat / 90;   // Normalize to [-1, 1]
         return { x, y };
@@ -42,7 +40,38 @@ const Projections = {
         
         // Normalize to similar scale as other projections
         return { x: x / 2, y: y / 2 };
-    }
+    },
+
+    bonne: (lon, lat) => {
+        const latRad = lat * Math.PI / 180;
+        const lonRad = lon * Math.PI / 180;
+        
+        const lat0 = 45 * Math.PI / 180; 
+        const lon0 = 0; // Central Meridian (lambda_0)
+        
+        // Radius of the parallel of latitude
+        const rho = (1 / Math.tan(lat0)) + lat0 - latRad;
+        if (rho <= 0) return null;
+        
+        // Angle of rotation (E)
+        const E = ((lonRad - lon0) * Math.cos(latRad)) / rho;
+        
+        // Calculate the raw coordinates
+        const x = rho * Math.sin(E);
+        const y = (1 / Math.tan(lat0)) - rho * Math.cos(E);
+        
+        const scaleFactor = 2;
+        const verticalCenterShift = -0.5; 
+
+        // Shift y_raw to center the heart shape, then scale both coordinates down
+        const x_final = x / scaleFactor;
+        const y_final = (y - verticalCenterShift) / scaleFactor;
+        
+        return { 
+            x: x_final, 
+            y: y_final 
+        };
+}
 };
 
 // Inverse projections: map normalized projection coords (nx,ny) back to lon/lat degrees
@@ -57,7 +86,6 @@ Projections.inverse = {
         return { lon, lat: latRad * 180 / Math.PI };
     },
     mollweide: (nx, ny) => {
-        // Based on the forward implementation in Projections.mollweide
         // nx,ny are the returned values (already divided by 2 in forward)
         const x = nx; const y = ny;
         const SQRT2 = Math.SQRT2; // sqrt(2)
@@ -73,43 +101,55 @@ Projections.inverse = {
         let lon = 0;
         if (Math.abs(denom) > 1e-8) lon = (x) / denom * 180 / Math.PI;
         return { lon, lat: latRad * 180 / Math.PI };
+    },
+    bonne: (nx, ny) => {
+        const scaleFactor = 2;        
+        const verticalCenterShift = -0.5; 
+        
+        // 1. Reverse Scale (Denormalize)
+        const x_scaled = nx * scaleFactor;
+        const y_scaled = ny * scaleFactor;
+        
+        // 2. Reverse Shift (Uncenter)
+        const x = x_scaled;
+        const y = y_scaled + verticalCenterShift;
+        const lat0 = 45 * Math.PI / 180;
+        const lon0 = 0; // central meridian at 0°
+        
+        const cot_lat0 = 1 / Math.tan(lat0);
+        const rho = Math.sqrt(x * x + Math.pow(cot_lat0 - y, 2));
+        
+        // Calculate latitude
+        const latRad = cot_lat0 + lat0 - rho;
+        
+
+        if (latRad > Math.PI / 2 || latRad < -Math.PI / 2) {
+            return null; // This coordinate is invalid
+        }
+
+        const POLE_LIMIT_RAD = 89.999 * Math.PI / 180; 
+        if (Math.abs(latRad) >= POLE_LIMIT_RAD) {
+            // At the pole, longitude is 0.
+            return { lon: 0, lat: latRad > 0 ? 90 : -90 };
+        }
+
+        // Calculate longitude
+        const E = Math.atan2(x, cot_lat0 - y);
+        const lonRad = lon0 + (rho * E) / Math.cos(latRad);
+        
+        // --- FINAL FIX (Rings of Noise) ---
+        const MAX_LON_RAD = 181 * Math.PI / 180; // Allow a tiny buffer
+        
+        // If the longitude is calculated outside the map's extent, skip it.
+        if (Math.abs(lonRad) > MAX_LON_RAD) {
+            return null;
+        }
+
+        return {
+            lon: lonRad * 180 / Math.PI,
+            lat: latRad * 180 / Math.PI
+        }
     }
 };
 
-// Tissot's Indicatrix calculation
-function calculateTissot(lon, lat, projectionName, delta = 1.0) {
-    const proj = Projections[projectionName];
-    const dLon = delta; // degrees
-    const dLat = delta; // degrees
-    
-    // Calculate four points around the center
-    const center = proj(lon, lat);
-    const right = proj(lon + dLon, lat);
-    const top = proj(lon, lat + dLat);
-    
-    // Calculate derivatives (approximate)
-    const dx_dlon = (right.x - center.x) / dLon;
-    const dy_dlon = (right.y - center.y) / dLon;
-    const dx_dlat = (top.x - center.x) / dLat;
-    const dy_dlat = (top.y - center.y) / dLat;
-    
-    // First fundamental form coefficients
-    const E = dx_dlon * dx_dlon + dy_dlon * dy_dlon;
-    const F = dx_dlon * dx_dlat + dy_dlon * dy_dlat;
-    const G = dx_dlat * dx_dlat + dy_dlat * dy_dlat;
-    
-    // Area scale factor
-    const areaScale = Math.sqrt(E * G - F * F);
-    
-    return {
-        center: center,
-        scale: areaScale,
-        ellipse: {
-            a: Math.sqrt(E),
-            b: Math.sqrt(G),
-            angle: Math.atan2(F, E)
-        }
-    };
-}
-
-export { Projections, calculateTissot };
+export { Projections };

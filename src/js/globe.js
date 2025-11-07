@@ -3,7 +3,12 @@ export class GlobeRenderer {
         this.container = container;
         this.initScene();
         this.animate();
-        window.addEventListener('resize', () => this.onWindowResize());
+
+        this.resizeTimeout = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(this.resizeTimeout);
+            this.resizeTimeout = setTimeout(() => this.onWindowResize(), 100);
+        });
     }
 
     initScene() {
@@ -98,13 +103,47 @@ export class GlobeRenderer {
         el.addEventListener('pointerleave', () => {
             this.isPointerDown = false;
         });
+
+        el.addEventListener('wheel', (e) => {
+            // Prevent default browser scrolling when wheeling over the canvas
+            e.preventDefault(); 
+            
+            // Determine the direction of the scroll
+            // e.deltaY is typically negative for scroll up (zoom in) and positive for scroll down (zoom out)
+            const zoomFactor = 0.5; // Adjust this value to change sensitivity
+            
+            // Calculate the new Z position for the camera
+            // We move the camera along its Z axis (depth)
+            let newZ = this.camera.position.z + e.deltaY * zoomFactor * 0.01; 
+            
+            // Clamp the zoom distance to sensible limits (e.g., 3 to 15)
+            newZ = Math.max(3, Math.min(15, newZ)); 
+            
+            // Apply the new position
+            this.camera.position.z = newZ;
+            
+            // The scene will be re-rendered on the next animate() frame, 
+            // so no need to call this.renderer.render() immediately.
+        }, { passive: false }); // Use {passive: false} to allow preventDefault()
     }
 
     onWindowResize() {
         if (!this.container || !this.camera || !this.renderer) return;
-        this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+
+        // Get the current container dimensions
+        const width = this.container.clientWidth;
+        const height = this.container.clientHeight;
+        
+        console.log('Globe container size:', width, 'x', height);
+        
+        if (width > 0 && height > 0) {
+            // Update camera aspect ratio
+            this.camera.aspect = width / height;
+            this.camera.updateProjectionMatrix();
+            
+            // Update renderer size
+            this.renderer.setSize(width, height, false);
+        }
     }
 
     animate() {
